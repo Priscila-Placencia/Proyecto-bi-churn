@@ -30,7 +30,7 @@ TRADUCCION_EVENTO = {
 
 
 
-st.set_page_config(page_title="SGCV E-Commerce BI", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="SGCV E-Commerce BI", layout="wide")
 
 # ============================================================
 # LOGIN SIMPLE
