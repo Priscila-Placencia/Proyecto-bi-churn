@@ -82,7 +82,7 @@ muestra['evento_es'] = muestra['event_type'].map(TRADUCCION_EVENTO).fillna(muest
 # ============================================================
 # MENÚ LATERAL
 # ============================================================
-st.sidebar.title("🛒 Retención E-Commerce")
+st.sidebar.title("Retención E-Commerce")
 st.sidebar.caption(f"Sesión activa")
 if st.sidebar.button("Cerrar sesión"):
     st.session_state.logueado = False
