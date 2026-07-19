@@ -4,6 +4,32 @@ import sqlite3
 import joblib
 import plotly.express as px
 
+# --- TRADUCCIONES ---
+TRADUCCION_CATEGORIA = {
+    "electronics": "Electrónica",
+    "appliances": "Electrodomésticos",
+    "computers": "Computadoras",
+    "apparel": "Ropa",
+    "furniture": "Muebles",
+    "auto": "Automotriz",
+    "construction": "Construcción",
+    "kids": "Niños",
+    "accessories": "Accesorios",
+    "sport": "Deportes",
+    "medicine": "Medicina",
+    "stationery": "Papelería",
+    "country_yard": "Jardín",
+    "desconocido": "Sin categoría"
+}
+
+TRADUCCION_EVENTO = {
+    "view": "Vista",
+    "cart": "Carrito",
+    "purchase": "Compra"
+}
+
+
+
 st.set_page_config(page_title="SGCV E-Commerce BI", page_icon="🛒", layout="wide")
 
 # ============================================================
@@ -45,6 +71,14 @@ def cargar_datos():
 
 usuarios, categorias, muestra, detallado, modelo, features = cargar_datos()
 
+# Aplicamos traducción a las columnas (creamos columnas nuevas en español para mostrar)
+detallado['categoria_es'] = detallado['categoria_principal'].map(TRADUCCION_CATEGORIA).fillna(detallado['categoria_principal'])
+detallado['evento_es'] = detallado['event_type'].map(TRADUCCION_EVENTO).fillna(detallado['event_type'])
+categorias['categoria_es'] = categorias['categoria_principal'].map(TRADUCCION_CATEGORIA).fillna(categorias['categoria_principal'])
+categorias['evento_es'] = categorias['event_type'].map(TRADUCCION_EVENTO).fillna(categorias['event_type'])
+
+muestra['evento_es'] = muestra['event_type'].map(TRADUCCION_EVENTO).fillna(muestra['event_type'])
+
 # ============================================================
 # MENÚ LATERAL
 # ============================================================
@@ -77,10 +111,10 @@ if pagina == "📊 Dashboard General":
             max_value=detallado['fecha'].max()
         )
     with f2:
-        opciones_categoria = ["Todos"] + sorted(detallado['categoria_principal'].unique().tolist())
+        opciones_categoria = ["Todos"] + sorted(detallado['categoria_es'].unique().tolist())
         seleccion_categoria = st.multiselect("Categoría", opciones_categoria, default=[])
-        filtro_categoria = (
-            detallado['categoria_principal'].unique().tolist()
+        filtro_categoria_es = (
+            detallado['categoria_es'].unique().tolist()
             if "Todos" in seleccion_categoria or len(seleccion_categoria) == 0
             else seleccion_categoria
         )
@@ -93,10 +127,10 @@ if pagina == "📊 Dashboard General":
             else seleccion_marca
         )
     with f4:
-        opciones_evento = ["Todos", "view", "cart", "purchase"]
+        opciones_evento = ["Todos", "Vista", "Carrito", "Compra"]
         seleccion_evento = st.multiselect("Tipo de evento", opciones_evento, default=[])
-        filtro_evento = (
-            ['view', 'cart', 'purchase']
+        filtro_evento_es = (
+            ["Vista", "Carrito", "Compra"]
             if "Todos" in seleccion_evento or len(seleccion_evento) == 0
             else seleccion_evento
         )
@@ -109,9 +143,9 @@ if pagina == "📊 Dashboard General":
 
     datos_filtrados = detallado[
         mask_fecha &
-        (detallado['categoria_principal'].isin(filtro_categoria)) &
+        (detallado['categoria_es'].isin(filtro_categoria_es)) &
         (detallado['brand'].isin(filtro_marca)) &
-        (detallado['event_type'].isin(filtro_evento))
+        (detallado['evento_es'].isin(filtro_evento_es))
     ]
 
     # --- KPIs ---
@@ -132,8 +166,8 @@ if pagina == "📊 Dashboard General":
         st.plotly_chart(fig1, use_container_width=True)
     with c2:
         fig2 = px.bar(
-            datos_filtrados.groupby('categoria_principal')['total_eventos'].sum().reset_index(),
-            x='categoria_principal', y='total_eventos', title="Eventos por categoría", color='categoria_principal'
+            datos_filtrados.groupby('categoria_es')['total_eventos'].sum().reset_index(),
+            x='categoria_es', y='total_eventos', title="Eventos por categoría", color='categoria_es'
         )
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -183,6 +217,18 @@ elif pagina == "🔮 Predicción de Churn":
 # ============================================================
 elif pagina == "🗄️ Explorar Base de Datos":
     st.title("Base de Datos del Sistema")
-    tabla = st.selectbox("Selecciona una tabla", ["Dim_Usuario", "Resumen_Categoria", "Resumen_Detallado", "Muestra_Eventos"])
-    st.dataframe({"Dim_Usuario": usuarios, "Resumen_Categoria": categorias,
-                  "Resumen_Detallado": detallado, "Muestra_Eventos": muestra}[tabla])
+    
+    opciones_tabla = {
+        "Usuarios (con variables de churn)": usuarios,
+        "Resumen por Categoría": categorias.drop(columns=['categoria_principal', 'event_type']).rename(
+            columns={'categoria_es': 'Categoría', 'evento_es': 'Tipo de Evento', 'total': 'Total', 'ingresos': 'Ingresos'}
+        ),
+        "Resumen Detallado (fecha/categoría/marca)": detallado.drop(columns=['categoria_principal', 'event_type']).rename(
+            columns={'fecha': 'Fecha', 'categoria_es': 'Categoría', 'brand': 'Marca', 'evento_es': 'Tipo de Evento',
+                     'total_eventos': 'Total Eventos', 'ingresos': 'Ingresos'}
+        ),
+        "Muestra de Eventos": muestra.drop(columns=['event_type']).rename(columns={'evento_es': 'Tipo de Evento'})
+    }
+    
+    tabla_seleccionada = st.selectbox("Selecciona una tabla", list(opciones_tabla.keys()))
+    st.dataframe(opciones_tabla[tabla_seleccionada])
