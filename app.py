@@ -67,7 +67,7 @@ if pagina == "📊 Dashboard General":
     st.title("Dashboard de Business Intelligence")
     st.caption("Filtra por fecha, categoría, marca y tipo de evento")
 
-    # --- FILTROS ---
+# --- FILTROS ---
     f1, f2, f3, f4 = st.columns(4)
     with f1:
         rango_fecha = st.date_input(
@@ -77,21 +77,29 @@ if pagina == "📊 Dashboard General":
             max_value=detallado['fecha'].max()
         )
     with f2:
-        filtro_categoria = st.multiselect(
-            "Categoría", detallado['categoria_principal'].unique().tolist(),
-            default=detallado['categoria_principal'].unique().tolist()
+        opciones_categoria = ["Todos"] + sorted(detallado['categoria_principal'].unique().tolist())
+        seleccion_categoria = st.multiselect("Categoría", opciones_categoria, default=[])
+        filtro_categoria = (
+            detallado['categoria_principal'].unique().tolist()
+            if "Todos" in seleccion_categoria or len(seleccion_categoria) == 0
+            else seleccion_categoria
         )
     with f3:
-        filtro_marca = st.multiselect(
-            "Marca", detallado['brand'].unique().tolist(),
-            default=detallado['brand'].unique().tolist()
+        opciones_marca = ["Todos"] + sorted(detallado['brand'].unique().tolist())
+        seleccion_marca = st.multiselect("Marca", opciones_marca, default=[])
+        filtro_marca = (
+            detallado['brand'].unique().tolist()
+            if "Todos" in seleccion_marca or len(seleccion_marca) == 0
+            else seleccion_marca
         )
     with f4:
-        filtro_evento = st.multiselect(
-            "Tipo de evento", ['view', 'cart', 'purchase'],
-            default=['view', 'cart', 'purchase']
+        opciones_evento = ["Todos", "view", "cart", "purchase"]
+        seleccion_evento = st.multiselect("Tipo de evento", opciones_evento, default=[])
+        filtro_evento = (
+            ['view', 'cart', 'purchase']
+            if "Todos" in seleccion_evento or len(seleccion_evento) == 0
+            else seleccion_evento
         )
-
     # Aplicamos filtros
     if len(rango_fecha) == 2:
         mask_fecha = (detallado['fecha'] >= pd.to_datetime(rango_fecha[0])) & \
