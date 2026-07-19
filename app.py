@@ -89,15 +89,15 @@ if st.sidebar.button("Cerrar sesión"):
     st.rerun()
 
 pagina = st.sidebar.radio("Navegación", [
-    "📊 Dashboard General",
-    "🔮 Predicción de Churn",
-    "🗄️ Explorar Base de Datos"
+    "Dashboard General",
+    "Predicción de Churn",
+    "Explorar Base de Datos"
 ])
 
 # ============================================================
 # PÁGINA 1: DASHBOARD GENERAL
 # ============================================================
-if pagina == "📊 Dashboard General":
+if pagina == "Dashboard General":
     st.title("Dashboard de Business Intelligence")
     st.caption("Filtra por fecha, categoría, marca y tipo de evento")
 
@@ -185,7 +185,7 @@ if pagina == "📊 Dashboard General":
 # ============================================================
 # PÁGINA 2: PREDICCIÓN DE CHURN
 # ============================================================
-elif pagina == "🔮 Predicción de Churn":
+elif pagina == "Predicción de Churn":
     st.title("Predicción de Riesgo de Churn")
     modo = st.radio("¿Qué quieres predecir?", ["Cliente existente", "Simular cliente nuevo"])
 
@@ -208,14 +208,14 @@ elif pagina == "🔮 Predicción de Churn":
             proba = modelo.predict_proba(df_entrada)[0][1]
             st.metric("Probabilidad de Churn", f"{proba*100:.1f}%")
             if proba > 0.5:
-                st.error("⚠️ Cliente en riesgo de abandono")
+                st.error("Cliente en riesgo de abandono")
             else:
-                st.success("✅ Cliente probablemente se mantendrá activo")
+                st.success("Cliente probablemente se mantendrá activo")
 
 # ============================================================
 # PÁGINA 3: EXPLORAR BASE DE DATOS
 # ============================================================
-elif pagina == "🗄️ Explorar Base de Datos":
+elif pagina == "Explorar Base de Datos":
     st.title("Base de Datos del Sistema")
     
     opciones_tabla = {
