@@ -4,25 +4,56 @@ import sqlite3
 import joblib
 import plotly.express as px
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="SGCV E-Commerce", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="SGCV E-Commerce BI", page_icon="🛒", layout="wide")
 
-# --- CARGA DE DATOS Y MODELO (se cachea para que no recargue cada vez) ---
+# ============================================================
+# LOGIN SIMPLE
+# ============================================================
+USUARIOS = {"admin": "admin123", "profesor": "epn2026"}
+
+if "logueado" not in st.session_state:
+    st.session_state.logueado = False
+
+if not st.session_state.logueado:
+    st.title("🛒 SGCV — Sistema de Gestión de BI E-Commerce")
+    st.subheader("Iniciar sesión")
+    usuario = st.text_input("Usuario")
+    clave = st.text_input("Contraseña", type="password")
+    if st.button("Ingresar"):
+        if usuario in USUARIOS and USUARIOS[usuario] == clave:
+            st.session_state.logueado = True
+            st.rerun()
+        else:
+            st.error("Usuario o contraseña incorrectos")
+    st.stop()
+
+# ============================================================
+# CARGA DE DATOS Y MODELO
+# ============================================================
 @st.cache_resource
 def cargar_datos():
     conn = sqlite3.connect('app_bi.db')
     usuarios = pd.read_sql_query("SELECT * FROM Dim_Usuario", conn)
     categorias = pd.read_sql_query("SELECT * FROM Resumen_Categoria", conn)
     muestra = pd.read_sql_query("SELECT * FROM Muestra_Eventos", conn)
+    detallado = pd.read_sql_query("SELECT * FROM Resumen_Detallado", conn)
     conn.close()
     modelo = joblib.load('modelo_churn.pkl')
     features = joblib.load('features.pkl')
-    return usuarios, categorias, muestra, modelo, features
+    detallado['fecha'] = pd.to_datetime(detallado['fecha'])
+    return usuarios, categorias, muestra, detallado, modelo, features
 
-usuarios, categorias, muestra, modelo, features = cargar_datos()
+usuarios, categorias, muestra, detallado, modelo, features = cargar_datos()
 
-# --- MENÚ LATERAL ---
+# ============================================================
+# MENÚ LATERAL
+# ============================================================
 st.sidebar.title("🛒 Retención E-Commerce")
+st.sidebar.caption(f"Sesión activa")
+if st.sidebar.button("Cerrar sesión"):
+    st.session_state.logueado = False
+    st.rerun()
+
 pagina = st.sidebar.radio("Navegación", [
     "📊 Dashboard General",
     "🔮 Predicción de Churn",
@@ -30,88 +61,106 @@ pagina = st.sidebar.radio("Navegación", [
 ])
 
 # ============================================================
-# PÁGINA 1: DASHBOARD GENERAL (con filtros interactivos)
+# PÁGINA 1: DASHBOARD GENERAL
 # ============================================================
 if pagina == "📊 Dashboard General":
     st.title("Dashboard de Business Intelligence")
-    st.caption("Retención de clientes y comportamiento de compra — E-Commerce")
+    st.caption("Filtra por fecha, categoría, marca y tipo de evento")
 
     # --- FILTROS ---
-    col1, col2 = st.columns(2)
-    with col1:
-        categorias_disponibles = categorias['categoria_principal'].unique().tolist()
-        filtro_categoria = st.multiselect(
-            "Filtrar por categoría", categorias_disponibles, default=categorias_disponibles
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        rango_fecha = st.date_input(
+            "Rango de fechas",
+            value=(detallado['fecha'].min(), detallado['fecha'].max()),
+            min_value=detallado['fecha'].min(),
+            max_value=detallado['fecha'].max()
         )
-    with col2:
+    with f2:
+        filtro_categoria = st.multiselect(
+            "Categoría", detallado['categoria_principal'].unique().tolist(),
+            default=detallado['categoria_principal'].unique().tolist()
+        )
+    with f3:
+        filtro_marca = st.multiselect(
+            "Marca", detallado['brand'].unique().tolist(),
+            default=detallado['brand'].unique().tolist()
+        )
+    with f4:
         filtro_evento = st.multiselect(
-            "Tipo de evento", ['view', 'cart', 'purchase'], default=['view', 'cart', 'purchase']
+            "Tipo de evento", ['view', 'cart', 'purchase'],
+            default=['view', 'cart', 'purchase']
         )
 
-    datos_filtrados = categorias[
-        (categorias['categoria_principal'].isin(filtro_categoria)) &
-        (categorias['event_type'].isin(filtro_evento))
+    # Aplicamos filtros
+    if len(rango_fecha) == 2:
+        mask_fecha = (detallado['fecha'] >= pd.to_datetime(rango_fecha[0])) & \
+                     (detallado['fecha'] <= pd.to_datetime(rango_fecha[1]))
+    else:
+        mask_fecha = pd.Series(True, index=detallado.index)
+
+    datos_filtrados = detallado[
+        mask_fecha &
+        (detallado['categoria_principal'].isin(filtro_categoria)) &
+        (detallado['brand'].isin(filtro_marca)) &
+        (detallado['event_type'].isin(filtro_evento))
     ]
 
     # --- KPIs ---
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Usuarios analizados", f"{len(usuarios):,}")
     k2.metric("Tasa de churn", f"{usuarios['churn'].mean()*100:.1f}%")
-    k3.metric("Total eventos (filtrado)", f"{datos_filtrados['total'].sum():,.0f}")
+    k3.metric("Eventos (filtrado)", f"{datos_filtrados['total_eventos'].sum():,.0f}")
     k4.metric("Ingresos (filtrado)", f"${datos_filtrados['ingresos'].sum():,.0f}")
 
     st.divider()
 
-    # --- GRÁFICOS ---
     c1, c2 = st.columns(2)
     with c1:
-        fig1 = px.bar(
-            datos_filtrados.groupby('categoria_principal')['total'].sum().reset_index(),
-            x='categoria_principal', y='total',
-            title="Eventos por categoría", color='categoria_principal'
+        fig1 = px.line(
+            datos_filtrados.groupby('fecha')['total_eventos'].sum().reset_index(),
+            x='fecha', y='total_eventos', title="Eventos por día (filtrado)"
         )
         st.plotly_chart(fig1, use_container_width=True)
     with c2:
-        fig2 = px.pie(
-            usuarios, names='churn',
-            title="Distribución de Churn (1 = Abandona, 0 = Se queda)"
+        fig2 = px.bar(
+            datos_filtrados.groupby('categoria_principal')['total_eventos'].sum().reset_index(),
+            x='categoria_principal', y='total_eventos', title="Eventos por categoría", color='categoria_principal'
         )
         st.plotly_chart(fig2, use_container_width=True)
 
-    fig3 = px.bar(
-        datos_filtrados[datos_filtrados['event_type']=='purchase'].sort_values('ingresos', ascending=False),
-        x='categoria_principal', y='ingresos',
-        title="Ingresos por categoría", color='categoria_principal'
-    )
-    st.plotly_chart(fig3, use_container_width=True)
+    c3, c4 = st.columns(2)
+    with c3:
+        fig3 = px.bar(
+            datos_filtrados.groupby('brand')['ingresos'].sum().reset_index().sort_values('ingresos', ascending=False),
+            x='brand', y='ingresos', title="Ingresos por marca"
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+    with c4:
+        fig4 = px.pie(usuarios, names='churn', title="Distribución de Churn")
+        st.plotly_chart(fig4, use_container_width=True)
 
 # ============================================================
 # PÁGINA 2: PREDICCIÓN DE CHURN
 # ============================================================
 elif pagina == "🔮 Predicción de Churn":
     st.title("Predicción de Riesgo de Churn")
-    st.caption("Selecciona un cliente existente o simula uno nuevo")
-
     modo = st.radio("¿Qué quieres predecir?", ["Cliente existente", "Simular cliente nuevo"])
 
     if modo == "Cliente existente":
         id_usuario = st.selectbox("Selecciona un usuario", usuarios['user_id'].unique())
         fila = usuarios[usuarios['user_id'] == id_usuario][features]
         real = usuarios[usuarios['user_id'] == id_usuario]['churn'].values[0]
-
         proba = modelo.predict_proba(fila)[0][1]
         st.metric("Probabilidad de Churn", f"{proba*100:.1f}%")
         st.write(f"**Churn real registrado:** {'Sí abandonó' if real==1 else 'Se mantuvo activo'}")
         st.dataframe(fila)
-
     else:
-        st.write("Ingresa los datos del cliente simulado:")
         entrada = {}
         cols = st.columns(3)
         for i, feat in enumerate(features):
             with cols[i % 3]:
                 entrada[feat] = st.number_input(feat, value=float(usuarios[feat].median()))
-
         if st.button("Predecir churn"):
             df_entrada = pd.DataFrame([entrada])
             proba = modelo.predict_proba(df_entrada)[0][1]
@@ -126,12 +175,6 @@ elif pagina == "🔮 Predicción de Churn":
 # ============================================================
 elif pagina == "🗄️ Explorar Base de Datos":
     st.title("Base de Datos del Sistema")
-    st.caption("Muestra de la tabla de hechos y dimensiones")
-
-    tabla = st.selectbox("Selecciona una tabla", ["Dim_Usuario", "Resumen_Categoria", "Muestra_Eventos"])
-    if tabla == "Dim_Usuario":
-        st.dataframe(usuarios)
-    elif tabla == "Resumen_Categoria":
-        st.dataframe(categorias)
-    else:
-        st.dataframe(muestra)
+    tabla = st.selectbox("Selecciona una tabla", ["Dim_Usuario", "Resumen_Categoria", "Resumen_Detallado", "Muestra_Eventos"])
+    st.dataframe({"Dim_Usuario": usuarios, "Resumen_Categoria": categorias,
+                  "Resumen_Detallado": detallado, "Muestra_Eventos": muestra}[tabla])
